@@ -21,21 +21,43 @@
 
 import Evtx.Evtx as evtx
 import re
+import pandas as pd
+from alive_progress import alive_bar
 
-def write_results(event_id, event_id_info, ip, sys_time, log_info):
-    with open('result.txt', 'a') as result:
-        result.write('EventID ' + event_id + ' ' + event_id_info + ' | ' 
-        + ip + ' | ' 
-        + sys_time + ' | ' 
-        + log_info +'\n')
+def write_results(df):
 
-def read_data(path, input):
+    with open('result.html', 'a') as result:
+        
+        df['SystemTime'] = pd.to_datetime(df['SystemTime'])
+        df = df.sort_values(by="SystemTime").reset_index(drop=True)
+        
+        df.to_html(result, header=result)
+        result.write('<br>')
+
+
+
+def append_results(df, event_id, event_id_info, ip, sys_time, log_info):
+    
+    df = df.append({'EventID': event_id, 
+                    'Info': event_id_info, 
+                    'IP': ip, 
+                    'SystemTime': sys_time, 
+                    'Log': log_info}, 
+                    ignore_index=True)
+    
+    return df
+         
+    
+
+def read_data(df, path, input):
+
     event_data = ''
 
     re_system_time = r'SystemTime=\"(.+)\.'
 
     re_rcm_id = r'>(1149)<\/EventID'
     re_ip_rcm = r'<Param3>(.+)<'
+    
 
     re_lsm_login = r'>(21)<\/EventID'
     re_lsm_login_gui = r'>(22)</EventID'
@@ -53,86 +75,146 @@ def read_data(path, input):
     print_lsm = False
     print_security = False
 
+
     with evtx.Evtx(path) as log:
-        for record in log.records():
-            event_data = record.xml()
-            match_sys_time = re.search(re_system_time, event_data)
-            if input == 'rcm':
-                if not print_rcm: 
-                    print('Searching for matching events in RemoteConnectionManager logs...This may take a while...')
-                    print_rcm = True
-                             
-                match_id_1149 = re.search(re_rcm_id, event_data)
-                if match_id_1149 != None:
-                    match_ip_1149 = re.search(re_ip_rcm, event_data)
-                    write_results(match_id_1149.group(1), '(User authentication succeeded)', 
-                                   match_ip_1149.group(1), match_sys_time.group(1), 'RemoteConnectionManager_Operational')
-            elif input == 'lsm':
-                if not print_lsm:
-                    print('Searching for matching events in LocalSessionManager logs...This may take a while...')
-                    print_lsm = True
+        records = log.records()
+        with alive_bar(len(list(records))) as bar:
+            for record in log.records():
+                bar()
+                event_data = record.xml()
+                match_sys_time = re.search(re_system_time, event_data)
 
-                match_id_21 = re.search(re_lsm_login, event_data)
-                match_id_22 = re.search(re_lsm_login_gui, event_data)
-                match_id_24 = re.search(re_lsm_disc, event_data)
-                match_id_25 = re.search(re_lsm_rec, event_data)
-                match_ip_lsm = re.search(re_ip_lsm, event_data)
+                if input == 'rcm':
 
-                if match_id_21 != None:
-                    if match_ip_lsm != None:
-                        write_results(match_id_21.group(1), '(successful RDP logon)', 
-                                       match_ip_lsm.group(1), match_sys_time.group(1), 'LocalSessionManager_Operational')
-                elif match_id_22 != None:
-                    if match_ip_lsm != None:
-                        write_results(match_id_22.group(1), '(successful RDP logon with GUI Desktop)', 
-                                       match_ip_lsm.group(1),match_sys_time.group(1), 'LocalSessionManager_Operational')
-                elif match_id_24 != None:
-                    if match_ip_lsm != None:
-                        write_results(match_id_24.group(1), '(user has disconnected from an RDP session)', 
-                                       match_ip_lsm.group(1), match_sys_time.group(1), 'LocalSessionManager_Operational')
-                elif match_id_25 != None:
-                    if match_ip_lsm != None:
-                        write_results(match_id_25.group(1), '(user has reconnected to an existing RDP session)', 
-                                       match_ip_lsm.group(1), match_sys_time.group(1), 'LocalSessionManager_Operational')
-                
-            elif input == 'security':
-                if not print_security:
-                    print('Searching for matching events in Security logs...This may take a while...')
-                    print_security = True
+                    if not print_rcm: 
+                        print('Searching for matching events in RemoteConnectionManager logs...')
+                        print_rcm = True
 
-                match_id_4624 = re.search(re_sec_login, event_data)
-                match_id_4778 = re.search(re_sec_reconnect, event_data)
-                match_id_4779 = re.search(re_sec_disconnect, event_data)
 
-                if match_id_4624 != None:
-                    match_ip_4624 = re.search(re_ip_login, event_data)
-                    if match_ip_4624 != None:
-                        write_results(match_id_4624.group(1), '(User successfully logged on)', 
-                                       match_ip_4624.group(1), match_sys_time.group(1), 'Security')
-                elif match_id_4778 != None:
-                    match_ip_4778 = re.search(re_ip_rec, event_data)
-                    if match_ip_4778 != None:
-                        write_results(match_id_4778.group(1), '(The user reconnected)', 
-                                       match_ip_4778.group(1), match_sys_time.group(1), 'Security')
-                elif match_id_4779 != None:
-                    match_ip_4779 = re.search(re_ip_rec, event_data)
-                    if match_ip_4779 != None:
-                        write_results(match_id_4779.group(1), '(The user disconnected)', 
-                                       match_ip_4779.group(1), match_sys_time.group(1), 'Security')
+                    match_id_1149 = re.search(re_rcm_id, event_data)
+                    if match_id_1149 != None:
 
+                        match_ip_1149 = re.search(re_ip_rcm, event_data)
+
+                        df = append_results(df, 
+                                            match_id_1149.group(1), 
+                                            'User authentication succeeded', 
+                                            match_ip_1149.group(1), 
+                                            match_sys_time.group(1), 
+                                            'RemoteConnectionManager_Operational')
+
+
+                elif input == 'lsm':
+
+                    if not print_lsm:
+                        print('Searching for matching events in LocalSessionManager logs...')
+                        print_lsm = True
+
+                    match_id_21 = re.search(re_lsm_login, event_data)
+                    match_id_22 = re.search(re_lsm_login_gui, event_data)
+                    match_id_24 = re.search(re_lsm_disc, event_data)
+                    match_id_25 = re.search(re_lsm_rec, event_data)
+                    match_ip_lsm = re.search(re_ip_lsm, event_data)
+
+                    if match_id_21 != None:
+
+                        if match_ip_lsm != None:
+                            df = append_results(df, 
+                                                match_id_21.group(1), 
+                                                'successful RDP logon', 
+                                                match_ip_lsm.group(1), 
+                                                match_sys_time.group(1), 
+                                                'LocalSessionManager_Operational')
+                    elif match_id_22 != None:
+
+                        if match_ip_lsm != None:
+                            df = append_results(df, 
+                                                match_id_22.group(1), 
+                                                'successful RDP logon with GUI Desktop', 
+                                                match_ip_lsm.group(1),
+                                                match_sys_time.group(1), 
+                                                'LocalSessionManager_Operational')
+                    elif match_id_24 != None:
+
+                        if match_ip_lsm != None:
+                            df = append_results(df, 
+                                                match_id_24.group(1), 
+                                                'user has disconnected from an RDP session', 
+                                                match_ip_lsm.group(1), 
+                                                match_sys_time.group(1), 
+                                                'LocalSessionManager_Operational')
+                    elif match_id_25 != None:
+
+                        if match_ip_lsm != None:
+                            df = append_results(df, 
+                                                match_id_25.group(1), 
+                                                'user has reconnected to an existing RDP session', 
+                                                match_ip_lsm.group(1), 
+                                                match_sys_time.group(1), 
+                                                'LocalSessionManager_Operational')
+
+                elif input == 'security':
+
+                    if not print_security:
+                        print('Searching for matching events in Security logs...This may take a while...')
+                        print_security = True
+
+                    match_id_4624 = re.search(re_sec_login, event_data)
+                    match_id_4778 = re.search(re_sec_reconnect, event_data)
+                    match_id_4779 = re.search(re_sec_disconnect, event_data)
+
+                    if match_id_4624 != None:
+
+                        match_ip_4624 = re.search(re_ip_login, event_data)
+                        if match_ip_4624 != None:
+                            df = append_results(df, match_id_4624.group(1), 
+                                                    'User successfully logged on', 
+                                                    match_ip_4624.group(1), 
+                                                    match_sys_time.group(1), 
+                                                    'Security')
+                    elif match_id_4778 != None:
+
+                        match_ip_4778 = re.search(re_ip_rec, event_data)
+                        if match_ip_4778 != None:
+                            df = append_results(df, 
+                                                match_id_4778.group(1), 
+                                                'The user reconnected', 
+                                                match_ip_4778.group(1), 
+                                                match_sys_time.group(1), 
+                                                'Security')
+                    elif match_id_4779 != None:
+
+                        match_ip_4779 = re.search(re_ip_rec, event_data)
+                        if match_ip_4779 != None:
+                            df = append_results(df, 
+                                                match_id_4779.group(1), 
+                                                'The user disconnected', 
+                                                match_ip_4779.group(1), 
+                                                match_sys_time.group(1), 
+                                                'Security')
         
+    write_results(df)
+
+
+df = pd.DataFrame(columns=['EventID', 'Info', 'IP', 'SystemTime', 'Log'])
+
+path_prefix = 'winevt/Logs/'
+log_prefix = 'Microsoft-Windows-TerminalServices-'
 try:
     print('Reading data from RemoteConnectionManager%4Operational.evtx...')
-    read_data('winevt/Logs/Microsoft-Windows-TerminalServices-RemoteConnectionManager%4Operational.evtx', 'rcm')
+    read_data(df, path_prefix + log_prefix + 'RemoteConnectionManager%4Operational.evtx', 'rcm')
 except:
     print('Failed to read RemoteConnectionManager%4Operational.evtx')
 try:
     print('Reading data from LocalSessionManager%4Operational.evtx...')
-    read_data('winevt/Logs/Microsoft-Windows-TerminalServices-LocalSessionManager%4Operational.evtx', 'lsm')
+    read_data(df, path_prefix + log_prefix + 'LocalSessionManager%4Operational.evtx', 'lsm')
 except:
     print('Failed to read LocalSessionManager%4Operational.evtx')
 try:
     print('Reading data from Security.evtx...')
-    read_data('winevt/Logs/Security.evtx', 'security')
+    read_data(df, path_prefix + 'Security.evtx', 'security')
 except:
-    print('Failed to read Security.evtx')        
+    print('Failed to read Security.evtx')
+
+
+       
