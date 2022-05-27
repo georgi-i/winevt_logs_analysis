@@ -38,7 +38,7 @@ def write_results(df):
 
 def append_results(df, event_id, event_id_info, ip, sys_time, log_info):
     
-    df = df.concat({'EventID': event_id, 
+    df = df.append({'EventID': event_id, 
                     'Info': event_id_info, 
                     'IP': ip, 
                     'SystemTime': sys_time, 
